@@ -1,31 +1,47 @@
-"use server"
+"use server";
 
-import { revalidatePath } from "next/cache";
-import User from "../models/user.model";
-import { connectToDB } from "../mongoose"
-import Thread from "../models/thread.model";
 import { FilterQuery, SortOrder } from "mongoose";
+import { revalidatePath } from "next/cache";
+
+import Community from "../models/community.model";
+import Thread from "../models/thread.model";
+import User from "../models/user.model";
+
+import { connectToDB } from "../mongoose";
+
+export async function fetchUser(userId: string) {
+  try {
+    connectToDB();
+
+    return await User.findOne({ id: userId }).populate({
+      path: "communities",
+      model: Community,
+    });
+  } catch (error: any) {
+    throw new Error(`Failed to fetch user: ${error.message}`);
+  }
+}
 
 interface Params {
-  userId: string,
-  username: string,
-  name: string,
-  bio: string,
-  image: string,
-  path: string,
+  userId: string;
+  username: string;
+  name: string;
+  bio: string;
+  image: string;
+  path: string;
 }
+
 export async function updateUser({
   userId,
-  username,
-  name,
   bio,
-  image,
+  name,
   path,
+  username,
+  image,
 }: Params): Promise<void> {
-
-  connectToDB();
-
   try {
+    connectToDB();
+
     await User.findOneAndUpdate(
       { id: userId },
       {
@@ -41,23 +57,8 @@ export async function updateUser({
     if (path === "/profile/edit") {
       revalidatePath(path);
     }
-
   } catch (error: any) {
     throw new Error(`Failed to create/update user: ${error.message}`);
-  }
-}
-
-export async function fetchUser(userId: string) {
-  try {
-    connectToDB();
-    return await User
-      .findOne({ id: userId })
-    // .populate({
-    //   path: 'communities',
-    //   model: Community
-    // })
-  } catch (error: any) {
-    throw new Error(`Failed to fetch user: ${error.message}`)
   }
 }
 
@@ -65,38 +66,46 @@ export async function fetchUserPosts(userId: string) {
   try {
     connectToDB();
 
-    const threads = await User.findOne({ id: userId })
-      .populate({
-        path: 'threads',
-        model: Thread,
-        populate: {
-          path: 'children',
+    // Find all threads authored by the user with the given userId
+    const threads = await User.findOne({ id: userId }).populate({
+      path: "threads",
+      model: Thread,
+      populate: [
+        {
+          path: "community",
+          model: Community,
+          select: "name id image _id", // Select the "name" and "_id" fields from the "Community" model
+        },
+        {
+          path: "children",
           model: Thread,
           populate: {
-            path: 'author',
+            path: "author",
             model: User,
-            select: 'name image id'
-          }
-        }
-      })
+            select: "name image id", // Select the "name" and "_id" fields from the "User" model
+          },
+        },
+      ],
+    });
     return threads;
-
-  } catch (error: any) {
-    throw new Error(`Failed tp fetch user posts: ${error.message}`)
+  } catch (error) {
+    console.error("Error fetching user threads:", error);
+    throw error;
   }
 }
 
+// Almost similar to Thead (search + pagination) and Community (search + pagination)
 export async function fetchUsers({
   userId,
   searchString = "",
   pageNumber = 1,
   pageSize = 20,
-  sortBy = "desc"
+  sortBy = "desc",
 }: {
   userId: string;
-  searchString?: string,
+  searchString?: string;
   pageNumber?: number;
-  pageSize?: number
+  pageSize?: number;
   sortBy?: SortOrder;
 }) {
   try {
@@ -138,9 +147,9 @@ export async function fetchUsers({
     const isNext = totalUsersCount > skipAmount + users.length;
 
     return { users, isNext };
-
-  } catch (error: any) {
-    throw new Error(`Failed to fetch users: ${error.message}`)
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    throw error;
   }
 }
 
@@ -148,26 +157,27 @@ export async function getActivity(userId: string) {
   try {
     connectToDB();
 
-    //find all threads created by the user
+    // Find all threads created by the user
     const userThreads = await Thread.find({ author: userId });
 
-    //collect all the child threads ids (replies) from the 'children' field 
+    // Collect all the child thread ids (replies) from the 'children' field of each user thread
     const childThreadIds = userThreads.reduce((acc, userThread) => {
       return acc.concat(userThread.children);
-    }, [])
+    }, []);
 
+    // Find and return the child threads (replies) excluding the ones created by the same user
     const replies = await Thread.find({
       _id: { $in: childThreadIds },
-      author: { $ne: userId }
+      author: { $ne: userId }, // Exclude threads authored by the same user
     }).populate({
-      path: 'author',
+      path: "author",
       model: User,
-      select: 'name image _id'
-    })
+      select: "name image _id",
+    });
 
     return replies;
-
-  } catch (error: any) {
-    throw new Error(`Failed to fetch activity ${error.message}`)
+  } catch (error) {
+    console.error("Error fetching replies: ", error);
+    throw error;
   }
 }

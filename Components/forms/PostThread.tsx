@@ -1,96 +1,82 @@
-"use client"
+"use client";
 
-import * as z from 'zod';
+import * as z from "zod";
 import { useForm } from "react-hook-form";
-import { Button } from "@/Components/ui/button";
+import { useOrganization } from "@clerk/nextjs";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { usePathname, useRouter } from "next/navigation";
+
 import {
     Form,
     FormControl,
-    FormDescription,
     FormField,
     FormItem,
     FormLabel,
     FormMessage,
 } from "@/Components/ui/form";
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Textarea } from '../ui/textarea';
-import { usePathname, useRouter } from 'next/navigation';
+import { Button } from "@/Components/ui/button";
+import { Textarea } from "@/Components/ui/textarea";
 
-// import { updateUser } from '@/lib/actions/user.actions';
-import { ThreadValidations } from "@/lib/validations/thread";
-import { createThread } from '@/lib/actions/thread.actions';
+import { ThreadValidation } from "@/lib/validations/thread";
+import { createThread } from "@/lib/actions/thread.actions";
 
 interface Props {
-    user: {
-        id: string,
-        objectId: string
-        username: string,
-        name: string,
-        bio: string,
-        image: string
-    };
-    btnTitle: string;
+    userId: string;
 }
 
-function PostThread({ userId }: { userId: string }) {
-
+function PostThread({ userId }: Props) {
     const router = useRouter();
     const pathname = usePathname();
 
+    const { organization } = useOrganization();
 
-    const form = useForm({
-        resolver: zodResolver(ThreadValidations),
+    const form = useForm<z.infer<typeof ThreadValidation>>({
+        resolver: zodResolver(ThreadValidation),
         defaultValues: {
-            thread: '',
+            thread: "",
             accountId: userId,
-        }
+        },
     });
 
-    const onSubmit = async (values: z.infer<typeof ThreadValidations>) => {
+    const onSubmit = async (values: z.infer<typeof ThreadValidation>) => {
         await createThread({
             text: values.thread,
             author: userId,
-            communityId: null,
-            path: pathname
-        })
+            communityId: organization ? organization.id : null,
+            path: pathname,
+        });
+
         router.push("/");
-    }
+    };
 
     return (
         <Form {...form}>
             <form
+                className='mt-10 flex flex-col justify-start gap-10'
                 onSubmit={form.handleSubmit(onSubmit)}
-                className="flex flex-col justify-start gap-10 mt-10"
             >
                 <FormField
                     control={form.control}
-                    name="thread"
+                    name='thread'
                     render={({ field }) => (
-                        <FormItem className='flex flex-col w-full gap-3'>
+                        <FormItem className='flex w-full flex-col gap-3'>
                             <FormLabel className='text-base-semibold text-light-2'>
                                 Content
                             </FormLabel>
-                            <FormControl className='no-focus border
-                             border-dark-4 bg-dark-3 text-light-1'>
-                                <Textarea
-                                    rows={15}
-                                    {...field}
-                                />
+                            <FormControl className='no-focus border border-dark-4 bg-dark-3 text-light-1'>
+                                <Textarea rows={15} {...field} />
                             </FormControl>
                             <FormMessage />
                         </FormItem>
                     )}
                 />
-                <Button
-                    type='submit'
-                    className='bg-primary-500'
-                >
+
+                <Button type='submit' className='bg-primary-500'>
                     Post Thread
                 </Button>
             </form>
         </Form>
-    )
-
+    );
 }
 
 export default PostThread;
